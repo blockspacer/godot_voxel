@@ -93,6 +93,11 @@ void VoxelTool::do_point(Vector3i pos) {
 	}
 	if (_channel == VoxelBuffer::CHANNEL_SDF) {
 		_set_voxel_f(pos, _mode == MODE_REMOVE ? 1.0 : -1.0);
+
+		_channel = VoxelBuffer::CHANNEL_DATA2;
+		_set_voxel(pos, 0);
+		_channel = VoxelBuffer::CHANNEL_SDF; // reset back to SDF
+
 	} else {
 		_set_voxel(pos, _mode == MODE_REMOVE ? _eraser_value : _value);
 	}
@@ -169,6 +174,13 @@ void VoxelTool::do_sphere(Vector3 center, float radius) {
 			float d = pos.to_vec3().distance_to(center) - radius;
 			_set_voxel_f(pos, sdf_blend(d, get_voxel_f(pos), _mode));
 		});
+
+		_channel = VoxelBuffer::CHANNEL_DATA2;
+		box.for_each_cell([this, center, radius](Vector3i pos) {
+			float d = pos.to_vec3().distance_to(center) - radius;
+			_set_voxel(pos, 0);
+		});
+		_channel = VoxelBuffer::CHANNEL_SDF; // reset back to SDF
 
 	} else {
 

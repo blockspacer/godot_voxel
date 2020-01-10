@@ -27,7 +27,9 @@ public:
 	unsigned int lod_index = 0;
 	bool pending_transition_update = false;
 
-	static VoxelBlock *create(Vector3i bpos, Ref<VoxelBuffer> buffer, unsigned int size, unsigned int p_lod_index);
+	static VoxelBlock *create(Vector3i bpos, Ref<VoxelBuffer> buffer, unsigned int size, unsigned int p_lod_index
+		//, int material_idx
+	);
 
 	~VoxelBlock();
 
@@ -74,6 +76,9 @@ private:
 			mi.set_world(nullptr);
 		}
 	}
+
+public:
+	//int material_idx = 0;
 
 private:
 	Vector3i _position_in_voxels;

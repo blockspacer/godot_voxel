@@ -708,9 +708,13 @@ void VoxelTerrain::send_block_data_requests() {
 	input.priority_position = _map->voxel_to_block(Vector3i(viewer_pos));
 
 	for (int i = 0; i < _blocks_pending_load.size(); ++i) {
+		/*VoxelBlock *block = _map->get_block(_blocks_pending_load[i]);
+		CRASH_COND(block == nullptr);*/
+
 		VoxelDataLoader::InputBlock input_block;
 		input_block.position = _blocks_pending_load[i];
 		input_block.lod = 0;
+		//input_block.material_idx = block->material_idx;
 		input.blocks.push_back(input_block);
 	}
 
@@ -839,6 +843,7 @@ void VoxelTerrain::_process() {
 			VoxelBlock *block = _map->get_block(block_pos);
 			bool update_neighbors = block == nullptr;
 			block = _map->set_block_buffer(block_pos, ob.data.voxels_loaded);
+			//block = _map->set_block_buffer(block_pos, ob.data.voxels_loaded, /* material_idx */ 0);
 
 			// TODO The following code appears to have order-dependency with block loading.
 			// i.e if block loading responses arrive in a different order they were requested in,

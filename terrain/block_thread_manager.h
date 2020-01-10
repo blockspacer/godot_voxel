@@ -31,6 +31,7 @@ public:
 		InputBlockData_T data;
 		Vector3i position; // In LOD-relative block coordinates
 		uint8_t lod = 0;
+		//uint8_t material_idx = 0;
 		bool can_be_discarded = true; // If false, will always be processed, even if the thread is told to exit
 		float sort_heuristic = 0;
 	};
@@ -40,6 +41,7 @@ public:
 		OutputBlockData_T data;
 		Vector3i position; // In LOD-relative block coordinates
 		uint8_t lod = 0;
+		//uint8_t material_idx = 0;
 		// True if the block was actually dropped.
 		// Ideally the requester will agree that it doesn't need that block anymore,
 		// but in cases it still does (bad case), it will have to query it again.
@@ -413,6 +415,7 @@ private:
 							OutputBlock &ob = data.output.blocks.write[output_begin + i];
 							ob.position = ib.position;
 							ob.lod = ib.lod;
+							//ob.material_idx = ib.material_idx;
 						}
 
 						data.processor(
@@ -562,6 +565,7 @@ private:
 					OutputBlock ob;
 					ob.position = ib.position;
 					ob.lod = ib.lod;
+					//ob.material_idx = ib.material_idx;
 					ob.drop_hint = true;
 					data.output.blocks.push_back(ob);
 

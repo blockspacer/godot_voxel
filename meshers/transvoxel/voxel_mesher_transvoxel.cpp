@@ -289,6 +289,8 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 		for (pos.y = min_pos.y; pos.y < max_pos.y; ++pos.y) {
 			for (pos.x = min_pos.x; pos.x < max_pos.x; ++pos.x) {
 
+				float texture_idx = 0.5f;
+
 				//    6-------7
 				//   /|      /|
 				//  / |     / |  Corners
@@ -313,6 +315,9 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 				for (unsigned int i = 0; i < corner_positions.size(); ++i) {
 					cell_samples[i] = tos(get_voxel(voxels, corner_positions[i], channel));
 				}
+
+				// TODO
+				texture_idx = (float)voxels.get_voxel(corner_positions[0], VoxelBuffer::CHANNEL_DATA2);
 
 				// Concatenate the sign of cell values to obtain the case code.
 				// Index 0 is the less significant bit, and index 7 is the most significant bit.
@@ -457,6 +462,8 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 							}
 
 							cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
+							//texture_idx = (float)voxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
+							_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
 
 							if (reuse_dir & 8) {
 								// Store the generated vertex so that other cells can reuse it.
@@ -481,6 +488,8 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 						}
 
 						cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
+						//texture_idx = (float)voxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
+						_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
 
 						current_reuse_cell.vertices[0] = cell_vertex_indices[i];
 
@@ -518,6 +527,8 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 							}
 
 							cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
+							//texture_idx = (float)voxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
+							_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
 						}
 					}
 
@@ -688,6 +699,8 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 	FixedArray<Vector3i, 13> cell_positions;
 	FixedArray<Vector3, 13> cell_gradients;
 
+	float texture_idx = 0.5f;
+
 	// Iterating in face space
 	for (int fy = min_fpos_y; fy < max_fpos_y; fy += 2) {
 		for (int fx = min_fpos_x; fx < max_fpos_x; fx += 2) {
@@ -721,6 +734,9 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 			for (unsigned int i = 0; i < 9; ++i) {
 				cell_samples[i] = tos(get_voxel(fvoxels, cell_positions[i], channel));
 			}
+
+			// TODO
+			texture_idx = (float)fvoxels.get_voxel(cell_positions[0], VoxelBuffer::CHANNEL_DATA2);
 
 			//  B-------C
 			//  |       |
@@ -865,6 +881,8 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 						}
 
 						cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
+						//texture_idx = (float)fvoxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
+						_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
 
 						if (reuse_direction & 0x8) {
 							// The vertex can be re-used later
@@ -914,6 +932,8 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 						}
 
 						cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
+						//texture_idx = (float)fvoxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
+						_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
 
 						// We are on a corner so the vertex will be re-usable later
 						ReuseTransitionCell &r = get_reuse_cell_2d(fx, fy);
@@ -987,7 +1007,8 @@ int VoxelMesherTransvoxel::emit_vertex(Vector3 primary, Vector3 normal, uint16_t
 
 	_output_vertices.push_back(primary);
 	_output_normals.push_back(normal);
-	_output_extra.push_back(Color(secondary.x, secondary.y, secondary.z, border_mask));
+	//_output_extra.push_back(Color(secondary.x, secondary.y, secondary.z, border_mask));
+	//_output_extra.push_back(Color(0.0, 1.0, 0.0, border_mask));
 
 	return vi;
 }

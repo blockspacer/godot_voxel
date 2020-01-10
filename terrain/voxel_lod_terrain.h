@@ -27,8 +27,8 @@ public:
 	VoxelLodTerrain();
 	~VoxelLodTerrain();
 
-	Ref<Material> get_material() const;
-	void set_material(Ref<Material> p_material);
+	Ref<Material> get_material(int idx) const;
+	void set_material(int idx, Ref<Material> p_material);
 
 	Ref<VoxelStream> get_stream() const;
 	void set_stream(Ref<VoxelStream> p_stream);
@@ -146,7 +146,12 @@ private:
 	// Only populated and then cleared inside _process, so lifetime of pointers should be valid
 	std::vector<VoxelBlock *> _blocks_pending_transition_update;
 
-	Ref<Material> _material;
+	enum {
+		MAX_MATERIALS = 3
+	};
+
+	//Ref<Material> _material;
+	Ref<Material> _materials[VoxelLodTerrain::MAX_MATERIALS];
 	std::vector<Ref<ShaderMaterial> > _shader_material_pool;
 
 	bool _generate_collisions = true;

@@ -83,11 +83,13 @@ float VoxelToolTerrain::_get_voxel_f(Vector3i pos) {
 
 void VoxelToolTerrain::_set_voxel(Vector3i pos, int v) {
 	ERR_FAIL_COND(_terrain == nullptr);
+	//_map->set_voxel(v, pos, _channel, /*material_idx*/2);
 	_map->set_voxel(v, pos, _channel);
 }
 
 void VoxelToolTerrain::_set_voxel_f(Vector3i pos, float v) {
 	ERR_FAIL_COND(_terrain == nullptr);
+	//_map->set_voxel_f(v, pos, _channel, /*material_idx*/2);
 	_map->set_voxel_f(v, pos, _channel);
 }
 

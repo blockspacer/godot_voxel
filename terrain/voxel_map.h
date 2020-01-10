@@ -45,9 +45,11 @@ public:
 	unsigned int get_lod_index() const;
 
 	int get_voxel(Vector3i pos, unsigned int c = 0) const;
+	//void set_voxel(int value, Vector3i pos, unsigned int c /*= 0*/, int material_idx);
 	void set_voxel(int value, Vector3i pos, unsigned int c = 0);
 
 	float get_voxel_f(Vector3i pos, unsigned int c = VoxelBuffer::CHANNEL_SDF) const;
+	//void set_voxel_f(real_t value, Vector3i pos, unsigned int c /*= VoxelBuffer::CHANNEL_SDF*/, int material_idx);
 	void set_voxel_f(real_t value, Vector3i pos, unsigned int c = VoxelBuffer::CHANNEL_SDF);
 
 	void set_default_voxel(int value, unsigned int channel = 0);
@@ -57,6 +59,7 @@ public:
 	void get_buffer_copy(Vector3i min_pos, VoxelBuffer &dst_buffer, unsigned int channels_mask = 1);
 
 	// Moves the given buffer into a block of the map. The buffer is referenced, no copy is made.
+	//VoxelBlock *set_block_buffer(Vector3i bpos, Ref<VoxelBuffer> buffer, int material_idx);
 	VoxelBlock *set_block_buffer(Vector3i bpos, Ref<VoxelBuffer> buffer);
 
 	struct NoAction {
@@ -103,6 +106,7 @@ public:
 
 private:
 	void set_block(Vector3i bpos, VoxelBlock *block);
+	//VoxelBlock *get_or_create_block_at_voxel_pos(Vector3i pos, int material_idx);
 	VoxelBlock *get_or_create_block_at_voxel_pos(Vector3i pos);
 	void remove_block_internal(Vector3i bpos);
 
@@ -122,6 +126,20 @@ private:
 	bool _b_is_block_surrounded(Vector3 pos) const { return is_block_surrounded(Vector3i(pos)); }
 	void _b_get_buffer_copy(Vector3 pos, Ref<VoxelBuffer> dst_buffer_ref, unsigned int channel = 0);
 	void _b_set_block_buffer(Vector3 bpos, Ref<VoxelBuffer> buffer) { set_block_buffer(Vector3i(bpos), buffer); }
+
+	/*int _b_get_voxel(int x, int y, int z, unsigned int c) { return get_voxel(Vector3i(x, y, z), c); }
+	//void _b_set_voxel(int value, int x, int y, int z, unsigned int c, const int material_idx) { set_voxel(value, Vector3i(x, y, z), c, material_idx); }
+	float _b_get_voxel_f(int x, int y, int z, unsigned int c) { return get_voxel_f(Vector3i(x, y, z), c); }
+	//void _b_set_voxel_f(float value, int x, int y, int z, unsigned int c, int material_idx) { set_voxel_f(value, Vector3i(x, y, z), c, material_idx); }
+	int _b_get_voxel_v(Vector3 pos, unsigned int c) { return get_voxel(Vector3i(pos), c); }
+	void _b_set_voxel_v(int value, Vector3 pos, unsigned int c, int material_idx) { set_voxel(value, Vector3i(pos), c, material_idx); }
+	bool _b_has_block(int x, int y, int z) { return has_block(Vector3i(x, y, z)); }
+	Vector3 _b_voxel_to_block(Vector3 pos) const { return voxel_to_block(Vector3i(pos)).to_vec3(); }
+	Vector3 _b_block_to_voxel(Vector3 pos) const { return block_to_voxel(Vector3i(pos)).to_vec3(); }
+	bool _b_is_block_surrounded(Vector3 pos) const { return is_block_surrounded(Vector3i(pos)); }
+	void _b_get_buffer_copy(Vector3 pos, Ref<VoxelBuffer> dst_buffer_ref, unsigned int channel = 0);
+	void _b_set_block_buffer(Vector3 bpos, Ref<VoxelBuffer> buffer, int material_idx) { set_block_buffer(Vector3i(bpos), buffer, material_idx); }
+*/
 
 private:
 	// Voxel values that will be returned if access is out of map bounds

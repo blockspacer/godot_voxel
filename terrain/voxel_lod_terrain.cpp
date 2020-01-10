@@ -1,3 +1,5 @@
+// NOTE: uses VoxelMesherTransvoxel from VoxelMeshUpdater when smooth_surface == true in MeshingParams
+
 #include "voxel_lod_terrain.h"
 #include "../math/rect3i.h"
 #include "../streams/voxel_stream_file.h"
@@ -38,6 +40,16 @@ Ref<ArrayMesh> build_mesh(const Vector<Array> surfaces, Mesh::PrimitiveType prim
 			*collidable_surface = surface;
 		}
 
+		/*PoolColorArray colors;
+		colors.push_back(Color(0.9, 0.1, 0.8));
+		colors.push_back(Color(0.0, 0.1, 0.8));
+		colors.push_back(Color(0.9, 0.1, 0.0));*/
+		/*for (unsigned int i = 0; i < vertex_count; ++i) {
+			w[i] = Color(gs, gs, gs) * modulate_color;
+		}*/
+
+		//surface[Mesh::ARRAY_COLOR] = colors;
+		//fill_surface_arrays(arrays);
 		mesh->add_surface_from_arrays(primitive, surface, Array(), compression_flags);
 		mesh->surface_set_material(surface_index, material);
 		// No multi-material supported yet
@@ -85,12 +97,12 @@ VoxelLodTerrain::~VoxelLodTerrain() {
 	}
 }
 
-Ref<Material> VoxelLodTerrain::get_material() const {
-	return _material;
+Ref<Material> VoxelLodTerrain::get_material(int idx) const {
+	return _materials[idx];
 }
 
-void VoxelLodTerrain::set_material(Ref<Material> p_material) {
-	_material = p_material;
+void VoxelLodTerrain::set_material(int idx, Ref<Material> p_material) {
+	_materials[idx] = p_material;
 }
 
 Ref<VoxelStream> VoxelLodTerrain::get_stream() const {
@@ -652,9 +664,14 @@ void VoxelLodTerrain::send_block_data_requests() {
 		Lod &lod = _lods[lod_index];
 
 		for (unsigned int i = 0; i < lod.blocks_to_load.size(); ++i) {
+			/*Vector3i bpos = _lods[0].map->voxel_to_block(Vector3i(lod.blocks_to_load[i])) >> 0;
+			VoxelBlock *block = _lods[0].map->get_block(bpos);
+			CRASH_COND(block == nullptr);*/
+
 			VoxelDataLoader::InputBlock input_block;
 			input_block.position = lod.blocks_to_load[i];
 			input_block.lod = lod_index;
+			//input_block.material_idx = 0;//block->material_idx;//(input_block.position.x <= 50 && input_block.position.x >= 0) ? 1 : 2;
 			input.blocks.push_back(input_block);
 		}
 
@@ -1058,14 +1075,22 @@ void VoxelLodTerrain::_process() {
 			}
 
 			// Store buffer
-			VoxelBlock *block = lod.map->set_block_buffer(ob.position, ob.data.voxels_loaded);
-			//print_line(String("Adding block {0} at lod {1}").format(varray(eo.block_position.to_vec3(), eo.lod)));
+			VoxelBlock *block = lod.map->set_block_buffer(ob.position, ob.data.voxels_loaded
+				/*material_idx*/
+				//,0
+				//,ob.position.x % 2 == 0 ? 1 : 2
+				);
+			print_line(String("Adding block {0} at lod {1}").format(varray(ob.position.to_vec3(), ob.lod)));
+
 			// The block will be made visible and meshed only by LodOctree
 			block->set_visible(false);
 			block->set_parent_visible(is_visible());
 			block->set_world(get_world());
 
-			Ref<ShaderMaterial> shader_material = _material;
+			//const int mat_idx =	ob.material_idx;//position.x <= 50 ? 1 : 2;
+			const int mat_idx = 0;//Math::random(0, (int)VoxelLodTerrain::MAX_MATERIALS);
+			//CRASH_COND(mat_idx < 0 || mat_idx >= VoxelLodTerrain::MAX_MATERIALS);
+			Ref<ShaderMaterial> shader_material = _materials[mat_idx];
 			if (shader_material.is_valid() && block->get_shader_material().is_null()) {
 				VOXEL_PROFILE_SCOPE(profile_process_get_loading_responses_duplicate_material);
 
@@ -1119,6 +1144,9 @@ void VoxelLodTerrain::_process() {
 				// All blocks we get here must be in the scheduled state
 				CRASH_COND(block->get_mesh_state() != VoxelBlock::MESH_UPDATE_NOT_SENT);
 
+				// TODO
+				// block->voxels->clear_channel(VoxelBuffer::CHANNEL_DATA2, 1);
+
 				// TODO Perhaps we could do a bit of early-rejection before spending time in buffer copy?
 
 				// Create buffer padded with neighbor voxels
@@ -1136,7 +1164,8 @@ void VoxelLodTerrain::_process() {
 
 				{
 					VOXEL_PROFILE_SCOPE(profile_process_send_mesh_updates_block_copy);
-					unsigned int channels_mask = (1 << VoxelBuffer::CHANNEL_SDF);
+					//unsigned int channels_mask = (1 << VoxelBuffer::CHANNEL_SDF);
+					unsigned int channels_mask = (1 << VoxelBuffer::CHANNEL_SDF) | (1 << VoxelBuffer::CHANNEL_DATA2);
 					lod.map->get_buffer_copy(lod.map->block_to_voxel(block_pos) - Vector3i(min_padding), **nbuffer, channels_mask);
 				}
 
@@ -1144,6 +1173,7 @@ void VoxelLodTerrain::_process() {
 				iblock.data.voxels = nbuffer;
 				iblock.position = block_pos;
 				iblock.lod = lod_index;
+				//iblock.material_idx = block->material_idx;
 				input.blocks.push_back(iblock);
 
 				block->set_mesh_state(VoxelBlock::MESH_UPDATE_SENT);
@@ -1225,13 +1255,16 @@ void VoxelLodTerrain::_process() {
 
 			const VoxelMesher::Output mesh_data = ob.data.smooth_surfaces;
 
+			//const int mat_idx = Math::random(0, (int)VoxelLodTerrain::MAX_MATERIALS);
+			const int mat_idx =	0;//ob.material_idx;//ob.position.x % 10 <= 5 ? 1 : 2;
+			CRASH_COND(mat_idx < 0 || mat_idx >= VoxelLodTerrain::MAX_MATERIALS);
 			// TODO Allow multiple collision surfaces
 			Array collidable_surface;
 			Ref<ArrayMesh> mesh = build_mesh(
 					mesh_data.surfaces,
 					mesh_data.primitive_type,
 					mesh_data.compression_flags,
-					_material, &collidable_surface);
+					_materials[mat_idx], &collidable_surface);
 
 			bool has_collision = _generate_collisions;
 			if (has_collision && _collision_lod_count != -1) {
@@ -1248,7 +1281,7 @@ void VoxelLodTerrain::_process() {
 							mesh_data.transition_surfaces[dir],
 							mesh_data.primitive_type,
 							mesh_data.compression_flags,
-							_material, nullptr);
+							_materials[mat_idx], nullptr);
 
 					block->set_transition_mesh(transition_mesh, dir);
 				}
@@ -1356,6 +1389,7 @@ struct ScheduleSaveAction {
 	bool with_copy;
 
 	void operator()(VoxelBlock *block) {
+		CRASH_COND(block == nullptr);
 
 		Ref<ShaderMaterial> sm = block->get_shader_material();
 		if (sm.is_valid()) {
@@ -1364,12 +1398,13 @@ struct ScheduleSaveAction {
 		}
 
 		if (block->is_modified()) {
-			//print_line(String("Scheduling save for block {0}").format(varray(block->position.to_vec3())));
+			print_line(String("Scheduling save for block {0}").format(varray(block->position.to_vec3())));
 			VoxelDataLoader::InputBlock b;
 			b.data.voxels_to_save = with_copy ? block->voxels->duplicate() : block->voxels;
 			b.position = block->position;
 			b.can_be_discarded = false;
 			b.lod = block->lod_index;
+			//b.material_idx = block->material_idx;
 			blocks_to_save.push_back(b);
 			block->set_modified(false);
 		}
@@ -1598,8 +1633,8 @@ void VoxelLodTerrain::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_stream", "stream"), &VoxelLodTerrain::set_stream);
 	ClassDB::bind_method(D_METHOD("get_stream"), &VoxelLodTerrain::get_stream);
 
-	ClassDB::bind_method(D_METHOD("set_material", "material"), &VoxelLodTerrain::set_material);
-	ClassDB::bind_method(D_METHOD("get_material"), &VoxelLodTerrain::get_material);
+	ClassDB::bind_method(D_METHOD("set_material", "idx", "material"), &VoxelLodTerrain::set_material);
+	ClassDB::bind_method(D_METHOD("get_material", "idx"), &VoxelLodTerrain::get_material);
 
 	ClassDB::bind_method(D_METHOD("set_view_distance", "distance_in_voxels"), &VoxelLodTerrain::set_view_distance);
 	ClassDB::bind_method(D_METHOD("get_view_distance"), &VoxelLodTerrain::get_view_distance);
@@ -1635,7 +1670,7 @@ void VoxelLodTerrain::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "lod_count"), "set_lod_count", "get_lod_count");
 	ADD_PROPERTY(PropertyInfo(Variant::REAL, "lod_split_scale"), "set_lod_split_scale", "get_lod_split_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "viewer_path"), "set_viewer_path", "get_viewer_path");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_material", "get_material");
+	//ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_material", "get_material");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "generate_collisions"), "set_generate_collisions", "get_generate_collisions");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_lod_count"), "set_collision_lod_count", "get_collision_lod_count");
 }

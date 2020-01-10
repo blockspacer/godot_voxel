@@ -59,7 +59,9 @@ int VoxelMap::get_voxel(Vector3i pos, unsigned int c) const {
 	return block->voxels->get_voxel(to_local(pos), c);
 }
 
-VoxelBlock *VoxelMap::get_or_create_block_at_voxel_pos(Vector3i pos) {
+VoxelBlock *VoxelMap::get_or_create_block_at_voxel_pos(Vector3i pos
+	//, int material_idx
+	) {
 
 	Vector3i bpos = voxel_to_block(pos);
 	VoxelBlock *block = get_block(bpos);
@@ -70,7 +72,9 @@ VoxelBlock *VoxelMap::get_or_create_block_at_voxel_pos(Vector3i pos) {
 		buffer->create(_block_size, _block_size, _block_size);
 		buffer->set_default_values(_default_voxel);
 
-		block = VoxelBlock::create(bpos, buffer, _block_size, _lod_index);
+		block = VoxelBlock::create(bpos, buffer, _block_size, _lod_index
+		//, material_idx
+		);
 
 		set_block(bpos, block);
 	}
@@ -78,9 +82,13 @@ VoxelBlock *VoxelMap::get_or_create_block_at_voxel_pos(Vector3i pos) {
 	return block;
 }
 
-void VoxelMap::set_voxel(int value, Vector3i pos, unsigned int c) {
+void VoxelMap::set_voxel(int value, Vector3i pos, unsigned int c
+	//, int material_idx
+	) {
 
-	VoxelBlock *block = get_or_create_block_at_voxel_pos(pos);
+	VoxelBlock *block = get_or_create_block_at_voxel_pos(pos
+		//, material_idx
+		);
 	block->voxels->set_voxel(value, to_local(pos), c);
 }
 
@@ -95,9 +103,13 @@ float VoxelMap::get_voxel_f(Vector3i pos, unsigned int c) const {
 	return block->voxels->get_voxel_f(lpos.x, lpos.y, lpos.z, c);
 }
 
-void VoxelMap::set_voxel_f(real_t value, Vector3i pos, unsigned int c) {
+void VoxelMap::set_voxel_f(real_t value, Vector3i pos, unsigned int c
+//, int material_idx
+) {
 
-	VoxelBlock *block = get_or_create_block_at_voxel_pos(pos);
+	VoxelBlock *block = get_or_create_block_at_voxel_pos(pos
+		//, material_idx
+		);
 	Vector3i lpos = to_local(pos);
 	block->voxels->set_voxel_f(value, lpos.x, lpos.y, lpos.z, c);
 }
@@ -153,11 +165,15 @@ void VoxelMap::remove_block_internal(Vector3i bpos) {
 	_blocks.erase(bpos);
 }
 
-VoxelBlock *VoxelMap::set_block_buffer(Vector3i bpos, Ref<VoxelBuffer> buffer) {
+VoxelBlock *VoxelMap::set_block_buffer(Vector3i bpos, Ref<VoxelBuffer> buffer
+//, int material_idx
+) {
 	ERR_FAIL_COND_V(buffer.is_null(), nullptr);
 	VoxelBlock *block = get_block(bpos);
 	if (block == NULL) {
-		block = VoxelBlock::create(bpos, *buffer, _block_size, _lod_index);
+		block = VoxelBlock::create(bpos, *buffer, _block_size, _lod_index
+		//, material_idx
+		);
 		set_block(bpos, block);
 	} else {
 		block->voxels = buffer;
@@ -253,7 +269,6 @@ bool VoxelMap::is_area_fully_loaded(const Rect3i voxels_box) const {
 }
 
 void VoxelMap::_bind_methods() {
-
 	ClassDB::bind_method(D_METHOD("get_voxel", "x", "y", "z", "c"), &VoxelMap::_b_get_voxel, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("set_voxel", "value", "x", "y", "z", "c"), &VoxelMap::_b_set_voxel, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("get_voxel_f", "x", "y", "z", "c"), &VoxelMap::_b_get_voxel_f, DEFVAL(VoxelBuffer::CHANNEL_SDF));
@@ -268,6 +283,21 @@ void VoxelMap::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("voxel_to_block", "voxel_pos"), &VoxelMap::_b_voxel_to_block);
 	ClassDB::bind_method(D_METHOD("block_to_voxel", "block_pos"), &VoxelMap::_b_block_to_voxel);
 	ClassDB::bind_method(D_METHOD("get_block_size"), &VoxelMap::get_block_size);
+
+	/*ClassDB::bind_method(D_METHOD("get_voxel", "x", "y", "z", "c"), &VoxelMap::_b_get_voxel, DEFVAL(0));
+	//ClassDB::bind_method(D_METHOD("set_voxel", "value", "x", "y", "z", "c", "material_idx"), &VoxelMap::_b_set_voxel);
+	ClassDB::bind_method(D_METHOD("get_voxel_f", "x", "y", "z", "c"), &VoxelMap::_b_get_voxel_f, DEFVAL(VoxelBuffer::CHANNEL_SDF));
+	//ClassDB::bind_method(D_METHOD("set_voxel_f", "value", "x", "y", "z", "c", "material_idx"), &VoxelMap::_b_set_voxel_f);
+	ClassDB::bind_method(D_METHOD("get_voxel_v", "pos", "c"), &VoxelMap::_b_get_voxel_v, DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("set_voxel_v", "value", "pos", "c", "material_idx"), &VoxelMap::_b_set_voxel_v);
+	ClassDB::bind_method(D_METHOD("get_default_voxel", "channel"), &VoxelMap::get_default_voxel, DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("set_default_voxel", "value", "channel"), &VoxelMap::set_default_voxel, DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("has_block", "x", "y", "z"), &VoxelMap::_b_has_block);
+	ClassDB::bind_method(D_METHOD("get_buffer_copy", "min_pos", "out_buffer", "channel"), &VoxelMap::_b_get_buffer_copy, DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("set_block_buffer", "block_pos", "buffer", "material_idx"), &VoxelMap::_b_set_block_buffer);
+	ClassDB::bind_method(D_METHOD("voxel_to_block", "voxel_pos"), &VoxelMap::_b_voxel_to_block);
+	ClassDB::bind_method(D_METHOD("block_to_voxel", "block_pos"), &VoxelMap::_b_block_to_voxel);
+	ClassDB::bind_method(D_METHOD("get_block_size"), &VoxelMap::get_block_size);*/
 }
 
 void VoxelMap::_b_get_buffer_copy(Vector3 pos, Ref<VoxelBuffer> dst_buffer_ref, unsigned int channel) {

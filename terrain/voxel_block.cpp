@@ -36,7 +36,9 @@ static Ref<ConcavePolygonShape> create_concave_polygon_shape(Array surface_array
 }
 
 // Helper
-VoxelBlock *VoxelBlock::create(Vector3i bpos, Ref<VoxelBuffer> buffer, unsigned int size, unsigned int p_lod_index) {
+VoxelBlock *VoxelBlock::create(Vector3i bpos, Ref<VoxelBuffer> buffer, unsigned int size, unsigned int p_lod_index
+	//, int material_idx
+	) {
 	const int bs = size;
 	ERR_FAIL_COND_V(buffer.is_null(), NULL);
 	ERR_FAIL_COND_V(buffer->get_size() != Vector3i(bs, bs, bs), NULL);
@@ -46,6 +48,7 @@ VoxelBlock *VoxelBlock::create(Vector3i bpos, Ref<VoxelBuffer> buffer, unsigned 
 	block->lod_index = p_lod_index;
 	block->_position_in_voxels = bpos * (size << p_lod_index);
 	block->voxels = buffer;
+	//block->material_idx = material_idx;
 
 #ifdef VOXEL_DEBUG_LOD_MATERIALS
 	Ref<SpatialMaterial> debug_material;

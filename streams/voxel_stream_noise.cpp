@@ -31,6 +31,7 @@ void VoxelStreamNoise::emerge_block(Ref<VoxelBuffer> out_buffer, Vector3i origin
 
 	OpenSimplexNoise &noise = **_noise;
 	VoxelBuffer &buffer = **out_buffer;
+	buffer.clear_channel(VoxelBuffer::CHANNEL_DATA2, 1);
 
 	if (origin_in_voxels.y > _height_start + _height_range) {
 
@@ -87,6 +88,10 @@ void VoxelStreamNoise::emerge_block(Ref<VoxelBuffer> out_buffer, Vector3i origin
 					float d = (n + 2.0 * t - 1.0) * iso_scale;
 
 					buffer.set_voxel_f(d, x, y, z, VoxelBuffer::CHANNEL_SDF);
+
+					const int texture_idx = 1;//Math::random(0, /*(int)VoxelLodTerrain::MAX_MATERIALS*/3);
+					buffer.set_voxel(texture_idx, x, y, z, VoxelBuffer::CHANNEL_DATA2);
+
 					// TODO Support for blocky voxels
 				}
 			}
