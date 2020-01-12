@@ -51,11 +51,11 @@ public:
 	// For example, using `do_box` will be more efficient than calling `do_point` many times.
 	virtual void set_voxel(Vector3i pos, int v);
 	virtual void set_voxel_f(Vector3i pos, float v);
-	virtual void do_point(Vector3i pos);
+	virtual void do_point(Vector3i pos, int texture_id);
 	virtual void do_line(Vector3i begin, Vector3i end);
 	virtual void do_circle(Vector3i pos, int radius, Vector3i direction);
-	virtual void do_sphere(Vector3 center, float radius);
-	virtual void do_box(Vector3i begin, Vector3i end);
+	virtual void do_sphere(Vector3 center, float radius, int texture_id);
+	virtual void do_box(Vector3i begin, Vector3i end, int texture_id);
 
 	virtual void paste(Vector3i pos, Ref<VoxelBuffer> p_voxels, int mask_value);
 
@@ -82,11 +82,11 @@ private:
 	void _b_set_voxel(Vector3 pos, int v) { set_voxel(Vector3i(pos), v); }
 	void _b_set_voxel_f(Vector3 pos, float v) { set_voxel_f(Vector3i(pos), v); }
 	Ref<VoxelRaycastResult> _b_raycast(Vector3 pos, Vector3 dir, float max_distance) { return raycast(pos, dir, max_distance); }
-	void _b_do_point(Vector3 pos) { do_point(Vector3i(pos)); }
+	void _b_do_point(Vector3 pos, int texture_id) { do_point(Vector3i(pos), texture_id); }
 	void _b_do_line(Vector3i begin, Vector3i end) { do_line(Vector3i(begin), Vector3i(end)); }
 	void _b_do_circle(Vector3 pos, float radius, Vector3 direction) { do_circle(Vector3i(pos), radius, Vector3i(direction)); }
-	void _b_do_sphere(Vector3 pos, float radius) { do_sphere(pos, radius); }
-	void _b_do_box(Vector3 begin, Vector3 end) { do_box(Vector3i(begin), Vector3i(end)); }
+	void _b_do_sphere(Vector3 pos, float radius, int texture_id) { do_sphere(pos, radius, texture_id); }
+	void _b_do_box(Vector3 begin, Vector3 end, int texture_id) { do_box(Vector3i(begin), Vector3i(end), texture_id); }
 	void _b_paste(Vector3 pos, Ref<Reference> voxels, int mask_value) { paste(Vector3i(pos), voxels, mask_value); }
 
 protected:

@@ -3,6 +3,7 @@
 
 #include "voxel_stream.h"
 #include <core/image.h>
+#include <modules/opensimplex/open_simplex_noise.h>
 
 // Provides infinite tiling heightmap based on an image
 class VoxelStreamImage : public VoxelStream {

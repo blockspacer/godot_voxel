@@ -86,17 +86,20 @@ void VoxelTool::set_voxel_f(Vector3i pos, float v) {
 	_post_edit(box);
 }
 
-void VoxelTool::do_point(Vector3i pos) {
+void VoxelTool::do_point(Vector3i pos, int texture_id) {
 	Rect3i box(pos, Vector3i(1));
 	if (!is_area_editable(box)) {
 		return;
 	}
 	if (_channel == VoxelBuffer::CHANNEL_SDF) {
-		_set_voxel_f(pos, _mode == MODE_REMOVE ? 1.0 : -1.0);
+		_set_voxel_f(pos, _mode == MODE_REMOVE ? 100.0 : -100.0);
 
-		_channel = VoxelBuffer::CHANNEL_DATA2;
-		_set_voxel(pos, 0);
-		_channel = VoxelBuffer::CHANNEL_SDF; // reset back to SDF
+		const bool keep_old_texture = texture_id < 0;
+		if(!keep_old_texture) {
+			_channel = VoxelBuffer::CHANNEL_DATA2;
+			_set_voxel(pos, texture_id);
+			_channel = VoxelBuffer::CHANNEL_SDF; // reset back to SDF
+		}
 
 	} else {
 		_set_voxel(pos, _mode == MODE_REMOVE ? _eraser_value : _value);
@@ -159,7 +162,7 @@ inline float sdf_blend(float src_value, float dst_value, VoxelTool::Mode mode) {
 }
 } // namespace
 
-void VoxelTool::do_sphere(Vector3 center, float radius) {
+void VoxelTool::do_sphere(Vector3 center, float radius, int texture_id) {
 
 	Rect3i box(Vector3i(center) - Vector3i(Math::floor(radius)), Vector3i(Math::ceil(radius) * 2));
 
@@ -171,16 +174,35 @@ void VoxelTool::do_sphere(Vector3 center, float radius) {
 	if (_channel == VoxelBuffer::CHANNEL_SDF) {
 
 		box.for_each_cell([this, center, radius](Vector3i pos) {
+			if(pos.to_vec3().distance_to(center) > radius)
+				return;
+
 			float d = pos.to_vec3().distance_to(center) - radius;
+			//float d = -radius;
 			_set_voxel_f(pos, sdf_blend(d, get_voxel_f(pos), _mode));
 		});
 
-		_channel = VoxelBuffer::CHANNEL_DATA2;
-		box.for_each_cell([this, center, radius](Vector3i pos) {
-			float d = pos.to_vec3().distance_to(center) - radius;
-			_set_voxel(pos, 0);
-		});
-		_channel = VoxelBuffer::CHANNEL_SDF; // reset back to SDF
+		Rect3i box2(Vector3i(center) - Vector3i(Math::floor(radius)), Vector3i(Math::ceil(radius) * 2.0));
+		const bool keep_old_texture = texture_id < 0;
+		if (is_area_editable(box2) && !keep_old_texture) {
+			_channel = VoxelBuffer::CHANNEL_DATA2;
+			box2.for_each_cell([this, center, radius, texture_id](Vector3i pos) {
+					if(pos.to_vec3().distance_to(center) > radius)
+						return;
+					/*FixedArray<Vector3i, 8> corner_positions;
+					corner_positions[0] = Vector3i(pos.x, pos.y, pos.z);
+					corner_positions[1] = Vector3i(pos.x + 1, pos.y, pos.z);
+					corner_positions[2] = Vector3i(pos.x, pos.y + 1, pos.z);
+					corner_positions[3] = Vector3i(pos.x + 1, pos.y + 1, pos.z);
+					corner_positions[4] = Vector3i(pos.x, pos.y, pos.z + 1);
+					corner_positions[5] = Vector3i(pos.x + 1, pos.y, pos.z + 1);
+					corner_positions[6] = Vector3i(pos.x, pos.y + 1, pos.z + 1);
+					corner_positions[7] = Vector3i(pos.x + 1, pos.y + 1, pos.z + 1);
+					_set_voxel(corner_positions[0], texture_id);*/
+					_set_voxel(pos, texture_id);
+			});
+			_channel = VoxelBuffer::CHANNEL_SDF; // reset back to SDF
+		}
 
 	} else {
 
@@ -188,7 +210,8 @@ void VoxelTool::do_sphere(Vector3 center, float radius) {
 
 		box.for_each_cell([this, center, radius, value](Vector3i pos) {
 			float d = pos.to_vec3().distance_to(center);
-			if (d <= radius) {
+			if (d <= radius)
+			{
 				_set_voxel(pos, value);
 			}
 		});
@@ -197,8 +220,31 @@ void VoxelTool::do_sphere(Vector3 center, float radius) {
 	_post_edit(box);
 }
 
-void VoxelTool::do_box(Vector3i begin, Vector3i end) {
-	ERR_PRINT("Not implemented");
+void VoxelTool::do_box(Vector3i begin, Vector3i end, int texture_id) {
+	Rect3i box(begin, end - begin);
+	//Rect3i box(begin, Vector3i(end.distance_sq(begin)));
+	//Rect3i box(begin, Vector3i(10.0, 20.0, 30.0));
+
+	ERR_FAIL_COND(end.distance_sq(begin) <= 0);
+
+	if (!is_area_editable(box)) {
+		print_line("Area not editable");
+		return;
+	}
+	box.for_each_cell([this](Vector3i pos) {
+		_set_voxel_f(pos, _mode == MODE_REMOVE ? 100.0 : -100.0);
+		//_set_voxel_f(pos, sdf_blend(d, get_voxel_f(pos), _mode));
+	});
+	const bool keep_old_texture = texture_id < 0;
+	if (is_area_editable(box) && !keep_old_texture) {
+		_channel = VoxelBuffer::CHANNEL_DATA2;
+		box.for_each_cell([this, texture_id](Vector3i pos) {
+				_set_voxel(pos, texture_id);
+		});
+		_channel = VoxelBuffer::CHANNEL_SDF; // reset back to SDF
+	}
+
+	_post_edit(box);
 }
 
 void VoxelTool::paste(Vector3i pos, Ref<VoxelBuffer> p_voxels, int mask_value) {
@@ -235,8 +281,9 @@ void VoxelTool::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_voxel_f", "pos"), &VoxelTool::_b_get_voxel_f);
 	ClassDB::bind_method(D_METHOD("set_voxel", "pos", "v"), &VoxelTool::_b_set_voxel);
 	ClassDB::bind_method(D_METHOD("set_voxel_f", "pos", "v"), &VoxelTool::_b_set_voxel_f);
-	ClassDB::bind_method(D_METHOD("do_point", "pos"), &VoxelTool::_b_do_point);
-	ClassDB::bind_method(D_METHOD("do_sphere", "center", "radius"), &VoxelTool::_b_do_sphere);
+	ClassDB::bind_method(D_METHOD("do_point", "pos", "texture_id"), &VoxelTool::_b_do_point);
+	ClassDB::bind_method(D_METHOD("do_box", "begin", "end", "texture_id"), &VoxelTool::_b_do_box);
+	ClassDB::bind_method(D_METHOD("do_sphere", "center", "radius", "texture_id"), &VoxelTool::_b_do_sphere);
 
 	ClassDB::bind_method(D_METHOD("raycast", "origin", "direction", "max_distance"), &VoxelTool::_b_raycast, DEFVAL(10.0));
 

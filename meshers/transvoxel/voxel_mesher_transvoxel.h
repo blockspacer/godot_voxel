@@ -43,10 +43,10 @@ private:
 	void reset_reuse_cells_2d(Vector3i block_size);
 	ReuseCell &get_reuse_cell(Vector3i pos);
 	ReuseTransitionCell &get_reuse_cell_2d(int x, int y);
-	int emit_vertex(Vector3 primary, Vector3 normal, uint16_t border_mask, Vector3 secondary);
+	int emit_vertex(Vector3 primary, Vector3 normal, uint16_t border_mask, Vector3 secondary, int texture_id);
 	void clear_output();
 	void fill_surface_arrays(Array &arrays);
-	void scale_output(float factor);
+	void scale_output(double factor);
 
 private:
 	FixedArray<std::vector<ReuseCell>, 2> _cache;
@@ -56,6 +56,7 @@ private:
 	std::vector<Vector3> _output_vertices;
 	std::vector<Vector3> _output_normals;
 	std::vector<Color> _output_extra;
+	std::vector<Vector2> _output_custom;
 	std::vector<int> _output_indices;
 };
 

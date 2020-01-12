@@ -1080,7 +1080,7 @@ void VoxelLodTerrain::_process() {
 				//,0
 				//,ob.position.x % 2 == 0 ? 1 : 2
 				);
-			print_line(String("Adding block {0} at lod {1}").format(varray(ob.position.to_vec3(), ob.lod)));
+			//print_line(String("Adding block {0} at lod {1}").format(varray(ob.position.to_vec3(), ob.lod)));
 
 			// The block will be made visible and meshed only by LodOctree
 			block->set_visible(false);

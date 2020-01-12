@@ -13,6 +13,69 @@ static const unsigned int MESH_COMPRESSION_FLAGS =
 		Mesh::ARRAY_COMPRESS_TEX_UV2 |
 		Mesh::ARRAY_COMPRESS_WEIGHTS;
 
+// TODO sort network?
+// see http://stackoverflow.com/questions/2786899/fastest-sort-of-fixed-length-6-int-array
+static void InlineInsertionSwap8(int* data)
+{
+	int i, j;
+
+	for (i = 1; i < 8; i++)
+	{
+		int tmp = data[i];
+		for (j = i; j >= 1 && tmp < data[j-1]; j--)
+		{
+			data[j] = data[j-1];
+		}
+		data[j] = tmp;
+	}
+}
+
+#define MATERIAL_NONE 0
+#define MATERIAL_AIR 0
+
+static int FindDominantMaterial(const int m[8])
+{
+	int data[8] = { m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7] };
+	InlineInsertionSwap8(data);
+
+	int current = data[0];
+	int count = 1;
+	int maxCount = 0;
+	int maxMaterial = 0;
+
+	for (int i = 1; i < 8; i++)
+	{
+		int m = data[i];
+		if (m == MATERIAL_AIR || m == MATERIAL_NONE)
+		{
+			continue;
+		}
+
+		if (current != m)
+		{
+			if (count > maxCount)
+			{
+				maxCount = count;
+				maxMaterial = current;
+			}
+
+			current = m;
+			count = 1;
+		}
+		else
+		{
+			count++;
+		}
+	}
+
+	if (count > maxCount)
+	{
+		maxMaterial = current;
+	}
+
+	return maxMaterial;
+}
+
 inline float tof(int8_t v) {
 	return static_cast<float>(v) / 256.f;
 }
@@ -121,7 +184,7 @@ inline uint8_t get_border_mask(const Vector3i &pos, const Vector3i &min_pos, con
 
 inline Vector3 normalized_not_null(Vector3 n) {
 	real_t lengthsq = n.length_squared();
-	if (lengthsq == 0) {
+	if (lengthsq <= 0.0001) {
 		return Vector3(0, 1, 0);
 	} else {
 		real_t length = Math::sqrt(lengthsq);
@@ -142,6 +205,7 @@ void VoxelMesherTransvoxel::clear_output() {
 	_output_normals.clear();
 	_output_vertices.clear();
 	_output_extra.clear();
+	_output_custom.clear();
 }
 
 void VoxelMesherTransvoxel::fill_surface_arrays(Array &arrays) {
@@ -149,11 +213,13 @@ void VoxelMesherTransvoxel::fill_surface_arrays(Array &arrays) {
 	PoolVector<Vector3> vertices;
 	PoolVector<Vector3> normals;
 	PoolVector<Color> extra;
+	PoolVector<Vector2> custom;
 	PoolVector<int> indices;
 
 	raw_copy_to(vertices, _output_vertices);
 	raw_copy_to(normals, _output_normals);
 	raw_copy_to(extra, _output_extra);
+	raw_copy_to(custom, _output_custom);
 	raw_copy_to(indices, _output_indices);
 
 	arrays.resize(Mesh::ARRAY_MAX);
@@ -162,10 +228,11 @@ void VoxelMesherTransvoxel::fill_surface_arrays(Array &arrays) {
 		arrays[Mesh::ARRAY_NORMAL] = normals;
 	}
 	arrays[Mesh::ARRAY_COLOR] = extra;
+	arrays[Mesh::ARRAY_TEX_UV2] = custom;
 	arrays[Mesh::ARRAY_INDEX] = indices;
 }
 
-void VoxelMesherTransvoxel::scale_output(float factor) {
+void VoxelMesherTransvoxel::scale_output(double factor) {
 
 	for (auto it = _output_vertices.begin(); it != _output_vertices.end(); ++it) {
 		*it *= factor;
@@ -289,7 +356,8 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 		for (pos.y = min_pos.y; pos.y < max_pos.y; ++pos.y) {
 			for (pos.x = min_pos.x; pos.x < max_pos.x; ++pos.x) {
 
-				float texture_idx = 0.5f;
+				float texture_idx = 0.0f;
+				float dominant_texture_idx = 0.0f;
 
 				//    6-------7
 				//   /|      /|
@@ -316,8 +384,38 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 					cell_samples[i] = tos(get_voxel(voxels, corner_positions[i], channel));
 				}
 
-				// TODO
+				/*// TODO
 				texture_idx = (float)voxels.get_voxel(corner_positions[0], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+				texture_idx = (float)voxels.get_voxel(corner_positions[1], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+				texture_idx = (float)voxels.get_voxel(corner_positions[2], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+				texture_idx = (float)voxels.get_voxel(corner_positions[3], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+				texture_idx = (float)voxels.get_voxel(corner_positions[4], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+				texture_idx = (float)voxels.get_voxel(corner_positions[5], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+				texture_idx = (float)voxels.get_voxel(corner_positions[6], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+				texture_idx = (float)voxels.get_voxel(corner_positions[7], VoxelBuffer::CHANNEL_DATA2);
+				//texture_idx = (int)(Math::floor(texture_idx / 8.0 + 0.5));
+				*/
+				const int cornerMaterials[8] =
+				{
+					voxels.get_voxel(corner_positions[0], VoxelBuffer::CHANNEL_DATA2),
+					voxels.get_voxel(corner_positions[1], VoxelBuffer::CHANNEL_DATA2),
+					voxels.get_voxel(corner_positions[2], VoxelBuffer::CHANNEL_DATA2),
+					voxels.get_voxel(corner_positions[3], VoxelBuffer::CHANNEL_DATA2),
+					voxels.get_voxel(corner_positions[4], VoxelBuffer::CHANNEL_DATA2),
+					voxels.get_voxel(corner_positions[5], VoxelBuffer::CHANNEL_DATA2),
+					voxels.get_voxel(corner_positions[6], VoxelBuffer::CHANNEL_DATA2),
+					voxels.get_voxel(corner_positions[7], VoxelBuffer::CHANNEL_DATA2),
+				};
+				dominant_texture_idx = (float)FindDominantMaterial(cornerMaterials);
+				if(texture_idx < 0.9)
+				texture_idx = dominant_texture_idx;
 
 				// Concatenate the sign of cell values to obtain the case code.
 				// Index 0 is the less significant bit, and index 7 is the most significant bit.
@@ -450,8 +548,16 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 							// However, it might be possible on low-res blocks bordering high-res ones due to neighboring rules,
 							// or by falling back on the generator that was used to produce the volume.
 
+							if(texture_idx < 0.9)
+							texture_idx = (float)voxels.get_voxel(p0, VoxelBuffer::CHANNEL_DATA2);
+							if(texture_idx < 0.9)
+							texture_idx = (float)voxels.get_voxel(p1, VoxelBuffer::CHANNEL_DATA2);
+
 							Vector3 primary = p0.to_vec3() * t0 + p1.to_vec3() * t1;
 							Vector3 normal = normalized_not_null(corner_gradients[v0] * t0 + corner_gradients[v1] * t1);
+
+							if(texture_idx < 0.9)
+							texture_idx = (float)voxels.get_voxel(primary, VoxelBuffer::CHANNEL_DATA2);
 
 							Vector3 secondary;
 							uint16_t border_mask = cell_border_mask;
@@ -461,9 +567,9 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 								border_mask |= (get_border_mask(p0, min_pos, max_pos) & get_border_mask(p1, min_pos, max_pos)) << 6;
 							}
 
-							cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
-							//texture_idx = (float)voxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
-							_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
+							cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary, texture_idx);
+							//texture_idx = (float)voxels.get_voxel(primary, VoxelBuffer::CHANNEL_DATA2);
+							//_output_extra.push_back(Color(0.0, texture_idx / 255.0, 0.0, border_mask));
 
 							if (reuse_dir & 8) {
 								// Store the generated vertex so that other cells can reuse it.
@@ -479,6 +585,9 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 						Vector3 primary = p1.to_vec3(); //p0.to_vec3() * t0 + p1.to_vec3() * t1;
 						Vector3 normal = normalized_not_null(corner_gradients[v1]); // corner_normals[v0] * t0 + corner_normals[v1] * t1;
 
+						if(texture_idx < 0.9)
+						texture_idx = (float)voxels.get_voxel(p1, VoxelBuffer::CHANNEL_DATA2);
+
 						Vector3 secondary;
 						uint16_t border_mask = cell_border_mask;
 
@@ -487,9 +596,9 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 							border_mask |= get_border_mask(p1, min_pos, max_pos) << 6;
 						}
 
-						cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
-						//texture_idx = (float)voxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
-						_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
+						cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary, texture_idx);
+						//texture_idx = (float)voxels.get_voxel(primary, VoxelBuffer::CHANNEL_DATA2);
+						//_output_extra.push_back(Color(0.0, texture_idx / 255.0, 0.0, border_mask));
 
 						current_reuse_cell.vertices[0] = cell_vertex_indices[i];
 
@@ -513,9 +622,17 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 
 						if (!present || cell_vertex_indices[i] < 0) {
 
+							if(texture_idx < 0.9)
+							texture_idx = (float)voxels.get_voxel(p0, VoxelBuffer::CHANNEL_DATA2);
+							if(texture_idx < 0.9)
+							texture_idx = (float)voxels.get_voxel(p1, VoxelBuffer::CHANNEL_DATA2);
+
 							// TODO Interpolation is useless, just pick either
 							Vector3 primary = p0.to_vec3() * t0 + p1.to_vec3() * t1;
 							Vector3 normal = normalized_not_null(corner_gradients[v0] * t0 + corner_gradients[v1] * t1);
+
+							if(texture_idx < 0.9)
+							texture_idx = (float)voxels.get_voxel(primary, VoxelBuffer::CHANNEL_DATA2);
 
 							// TODO This bit of code is repeated several times, factor it?
 							Vector3 secondary;
@@ -526,9 +643,9 @@ void VoxelMesherTransvoxel::build_internal(const VoxelBuffer &voxels, unsigned i
 								border_mask |= get_border_mask(t == 0 ? p1 : p0, min_pos, max_pos) << 6;
 							}
 
-							cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
-							//texture_idx = (float)voxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
-							_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
+							cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary, texture_idx);
+							//texture_idx = (float)voxels.get_voxel(primary, VoxelBuffer::CHANNEL_DATA2);
+							//_output_extra.push_back(Color(0.0, texture_idx / 255.0, 0.0, border_mask));
 						}
 					}
 
@@ -699,7 +816,8 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 	FixedArray<Vector3i, 13> cell_positions;
 	FixedArray<Vector3, 13> cell_gradients;
 
-	float texture_idx = 0.5f;
+	float texture_idx = 0.0f;
+	float dominant_texture_idx = 0.0f;
 
 	// Iterating in face space
 	for (int fy = min_fpos_y; fy < max_fpos_y; fy += 2) {
@@ -736,7 +854,36 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 			}
 
 			// TODO
-			texture_idx = (float)fvoxels.get_voxel(cell_positions[0], VoxelBuffer::CHANNEL_DATA2);
+			/*texture_idx = (float)fvoxels.get_voxel(cell_positions[0], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+			texture_idx = (float)fvoxels.get_voxel(cell_positions[1], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+			texture_idx = (float)fvoxels.get_voxel(cell_positions[2], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+			texture_idx = (float)fvoxels.get_voxel(cell_positions[3], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+			texture_idx = (float)fvoxels.get_voxel(cell_positions[4], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+			texture_idx = (float)fvoxels.get_voxel(cell_positions[5], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+			texture_idx = (float)fvoxels.get_voxel(cell_positions[6], VoxelBuffer::CHANNEL_DATA2);
+				if(texture_idx < 0.9)
+			texture_idx = (float)fvoxels.get_voxel(cell_positions[7], VoxelBuffer::CHANNEL_DATA2);*/
+			//texture_idx = (int)(Math::floor(texture_idx / 8.0 + 0.5));
+			const int cornerMaterials[8] =
+			{
+				fvoxels.get_voxel(cell_positions[0], VoxelBuffer::CHANNEL_DATA2),
+				fvoxels.get_voxel(cell_positions[1], VoxelBuffer::CHANNEL_DATA2),
+				fvoxels.get_voxel(cell_positions[2], VoxelBuffer::CHANNEL_DATA2),
+				fvoxels.get_voxel(cell_positions[3], VoxelBuffer::CHANNEL_DATA2),
+				fvoxels.get_voxel(cell_positions[4], VoxelBuffer::CHANNEL_DATA2),
+				fvoxels.get_voxel(cell_positions[5], VoxelBuffer::CHANNEL_DATA2),
+				fvoxels.get_voxel(cell_positions[6], VoxelBuffer::CHANNEL_DATA2),
+				fvoxels.get_voxel(cell_positions[7], VoxelBuffer::CHANNEL_DATA2),
+			};
+			dominant_texture_idx = (float)FindDominantMaterial(cornerMaterials);
+			if(texture_idx < 0.9)
+			texture_idx = dominant_texture_idx;
 
 			//  B-------C
 			//  |       |
@@ -858,11 +1005,19 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 						const Vector3 p0 = cell_positions[index_vertex_a].to_vec3();
 						const Vector3 p1 = cell_positions[index_vertex_b].to_vec3();
 
+						if(texture_idx < 0.9)
+						texture_idx = (float)fvoxels.get_voxel(p0, VoxelBuffer::CHANNEL_DATA2);
+						if(texture_idx < 0.9)
+						texture_idx = (float)fvoxels.get_voxel(p1, VoxelBuffer::CHANNEL_DATA2);
+
 						const Vector3 n0 = cell_gradients[index_vertex_a];
 						const Vector3 n1 = cell_gradients[index_vertex_b];
 
 						Vector3 primary = p0 * t0 + p1 * t1;
 						Vector3 normal = normalized_not_null(n0 * t0 + n1 * t1);
+
+						if(texture_idx < 0.9)
+						texture_idx = (float)fvoxels.get_voxel(primary, VoxelBuffer::CHANNEL_DATA2);
 
 						bool fullres_side = (index_vertex_a < 9 || index_vertex_b < 9);
 						uint16_t border_mask = cell_border_mask;
@@ -880,9 +1035,9 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 							border_mask = 0;
 						}
 
-						cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
-						//texture_idx = (float)fvoxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
-						_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
+						cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary, texture_idx);
+						//texture_idx = (float)fvoxels.get_voxel(primary, VoxelBuffer::CHANNEL_DATA2);
+						//_output_extra.push_back(Color(0.0, texture_idx / 255.0, 0.0, border_mask));
 
 						if (reuse_direction & 0x8) {
 							// The vertex can be re-used later
@@ -916,6 +1071,10 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 						// Going to create a new vertex
 
 						Vector3 primary = cell_positions[index_vertex].to_vec3();
+
+						if(texture_idx < 0.9)
+						texture_idx = (float)fvoxels.get_voxel(primary, VoxelBuffer::CHANNEL_DATA2);
+
 						Vector3 normal = normalized_not_null(cell_gradients[index_vertex]);
 
 						bool fullres_side = (index_vertex < 9);
@@ -931,9 +1090,9 @@ void VoxelMesherTransvoxel::build_transition(const VoxelBuffer &p_voxels, unsign
 							border_mask = 0;
 						}
 
-						cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary);
-						//texture_idx = (float)fvoxels.get_voxel(primary - Vector3(MIN_PADDING, MIN_PADDING, MIN_PADDING), VoxelBuffer::CHANNEL_DATA2);
-						_output_extra.push_back(Color(0.0, texture_idx, 0.0, border_mask));
+						cell_vertex_indices[i] = emit_vertex(primary, normal, border_mask, secondary, texture_idx);
+						//texture_idx = (float)fvoxels.get_voxel(primary, VoxelBuffer::CHANNEL_DATA2);
+						//_output_extra.push_back(Color(0.0, texture_idx / 255.0, 0.0, border_mask));
 
 						// We are on a corner so the vertex will be re-usable later
 						ReuseTransitionCell &r = get_reuse_cell_2d(fx, fy);
@@ -997,7 +1156,9 @@ VoxelMesherTransvoxel::ReuseTransitionCell &VoxelMesherTransvoxel::get_reuse_cel
 	return _cache_2d[j][i];
 }
 
-int VoxelMesherTransvoxel::emit_vertex(Vector3 primary, Vector3 normal, uint16_t border_mask, Vector3 secondary) {
+int VoxelMesherTransvoxel::emit_vertex(Vector3 primary, Vector3 normal, uint16_t border_mask, Vector3 secondary
+	, int texture_idx)
+{
 
 	int vi = _output_vertices.size();
 
@@ -1007,8 +1168,20 @@ int VoxelMesherTransvoxel::emit_vertex(Vector3 primary, Vector3 normal, uint16_t
 
 	_output_vertices.push_back(primary);
 	_output_normals.push_back(normal);
-	//_output_extra.push_back(Color(secondary.x, secondary.y, secondary.z, border_mask));
+	_output_extra.push_back(Color(secondary.x, secondary.y, secondary.z, border_mask));
 	//_output_extra.push_back(Color(0.0, 1.0, 0.0, border_mask));
+
+  if(texture_idx >= 9.0 && texture_idx < 11.0) {
+    _output_custom.push_back(Vector2(1.0, 0.0));//, 0.0, border_mask));
+  }
+  else if(texture_idx >= 99.0 && texture_idx < 101.0) {
+    _output_custom.push_back(Vector2(0.0, 1.0));//, 0.0, border_mask));
+  }
+  else if(texture_idx >= 199.0 && texture_idx < 201.0) {
+    _output_custom.push_back(Vector2(0.0, 0.0));//, 1.0, border_mask));
+  } else {
+		_output_custom.push_back(Vector2(0.0, 0.0));//, 0.0, border_mask));
+	}
 
 	return vi;
 }
