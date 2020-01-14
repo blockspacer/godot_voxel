@@ -1,5 +1,16 @@
 #include "voxel_stream_noise.h"
 
+namespace {
+
+static bool is_ranges_intersect(int start1, int end1, int start2, int end2) {
+	int max_start = std::max(start1, start2);
+	int min_end = std::min(end1, end2);
+	return (min_end >= max_start);
+}
+
+} // namespace
+
+
 void VoxelStreamNoise::set_channel(VoxelBuffer::ChannelId channel) {
 	ERR_FAIL_INDEX(channel, VoxelBuffer::MAX_CHANNELS);
 	_channel = channel;
@@ -26,48 +37,11 @@ real_t VoxelStreamNoise::get_height_start() const {
 }
 
 void VoxelStreamNoise::set_height_range(real_t hrange) {
-	if (hrange < 0.1f) {
-		hrange = 0.1f;
-	}
 	_height_range = hrange;
 }
 
 real_t VoxelStreamNoise::get_height_range() const {
 	return _height_range;
-}
-
-// For isosurface use cases, noise can be "shaped" by calculating only the first octave,
-// and discarding the next ones if beyond some distance away from the isosurface,
-// because then we assume next octaves won't change the sign (which crosses the surface).
-// This might reduce accuracy in some areas, but it speeds up the results.
-static inline float get_shaped_noise(OpenSimplexNoise &noise, float x, float y, float z, float threshold, float bias) {
-
-	x /= noise.get_period();
-	y /= noise.get_period();
-	z /= noise.get_period();
-
-	float sum = noise._get_octave_noise_3d(0, x, y, z);
-
-	// A default value for `threshold` would be `persistence`
-	if (sum + bias > threshold || sum + bias < -threshold) {
-		// Assume next octaves will not change sign of noise
-		return sum;
-	}
-
-	float amp = 1.0;
-	float max = 1.0;
-
-	int i = 0;
-	while (++i < noise.get_octaves()) {
-		x *= noise.get_lacunarity();
-		y *= noise.get_lacunarity();
-		z *= noise.get_lacunarity();
-		amp *= noise.get_persistence();
-		max += amp;
-		sum += noise._get_octave_noise_3d(i, x, y, z) * amp;
-	}
-
-	return sum / max;
 }
 
 void VoxelStreamNoise::emerge_block(Ref<VoxelBuffer> out_buffer, Vector3i origin_in_voxels, int lod) {
@@ -77,80 +51,60 @@ void VoxelStreamNoise::emerge_block(Ref<VoxelBuffer> out_buffer, Vector3i origin
 
 	OpenSimplexNoise &noise = **_noise;
 	VoxelBuffer &buffer = **out_buffer;
+	if (_channel == VoxelBuffer::CHANNEL_SDF)
+	{
+		buffer.clear_channel_f(_channel, 100.0);
+	}
+	else if (_channel == VoxelBuffer::CHANNEL_TYPE) {
+		buffer.clear_channel(_channel, 0);
+	}
 
-	int isosurface_lower_bound = static_cast<int>(Math::floor(_height_start));
-	int isosurface_upper_bound = static_cast<int>(Math::ceil(_height_start + _height_range));
+	/// \note iso_scale affects `blockyness` of terrain
+	const float iso_scale = noise.get_period() * 0.1;
+	//print_line(String("iso_scale = {0}").format(varray(iso_scale)));
 
-	const int air_type = 0;
-	const int matter_type = 1;
+	float zethaX = origin_in_voxels.x + (buffer.get_size().x << lod);
+	float zethaY = origin_in_voxels.y + (buffer.get_size().y << lod);
+	float zethaZ = origin_in_voxels.z + (buffer.get_size().z << lod);
 
-	if (origin_in_voxels.y >= isosurface_upper_bound) {
+	/// \note can`t just use height_in_range
+	const bool height_in_range = (buffer.get_size().y - 1) >= 0 && is_ranges_intersect(
+		_height_start,
+		_height_start + _height_range,
+		origin_in_voxels.y, /// \note can not add (0 << lod) because it == 0
+		origin_in_voxels.y + ((buffer.get_size().y - 1) << lod)
+	);
 
-		// Fill with air
-		if (_channel == VoxelBuffer::CHANNEL_SDF) {
-			buffer.clear_channel_f(_channel, 100.0);
-		} else if (_channel == VoxelBuffer::CHANNEL_TYPE) {
-			buffer.clear_channel(_channel, air_type);
-		}
+	if (!height_in_range) {
+		return;
+	}
 
-	} else if (origin_in_voxels.y + (buffer.get_size().y << lod) < isosurface_lower_bound) {
+	for (int z = 0; z < buffer.get_size().z; ++z) {
+		for (int x = 0; x < buffer.get_size().x; ++x) {
+			for (int y = 0; y < buffer.get_size().y; ++y) {
+				float lx = origin_in_voxels.x + (x << lod);
+				float ly = origin_in_voxels.y + (y << lod);
+				float lz = origin_in_voxels.z + (z << lod);
 
-		// Fill with matter
-		if (_channel == VoxelBuffer::CHANNEL_SDF) {
-			buffer.clear_channel_f(_channel, -100.0);
-		} else if (_channel == VoxelBuffer::CHANNEL_TYPE) {
-			buffer.clear_channel(_channel, matter_type);
-		}
+				/// \note can`t just use height_in_range
+				const bool voxel_in_range = ly < _height_start + _height_range && ly > _height_start;
+				if (!voxel_in_range) {
+					continue;
+				}
 
-	} else {
+				const float n = noise.get_noise_3d(lx, ly, lz); // ranges from [-1.0 to 1.0]
+				//print_line(String("at {0} n = {1}").format(varray(Vector3(lx, ly, lz), n)));
 
-		const float iso_scale = noise.get_period() * 0.1;
-		const Vector3i size = buffer.get_size();
-		const float height_range_inv = 1.f / _height_range;
-		const float one_minus_persistence = 1.f - noise.get_persistence();
+				/// \note voxel is air if its SDF value is >= 0
+				const float sdf_value = n * iso_scale;
 
-		for (int z = 0; z < size.z; ++z) {
-			int lz = origin_in_voxels.z + (z << lod);
-
-			for (int x = 0; x < size.x; ++x) {
-				int lx = origin_in_voxels.x + (x << lod);
-
-				for (int y = 0; y < size.y; ++y) {
-
-					int ly = origin_in_voxels.y + (y << lod);
-
-					if (ly < isosurface_lower_bound) {
-						// Below is only matter
-						if (_channel == VoxelBuffer::CHANNEL_SDF) {
-							buffer.set_voxel_f(-1, x, y, z, _channel);
-						} else if (_channel == VoxelBuffer::CHANNEL_TYPE) {
-							buffer.set_voxel(matter_type, x, y, z, _channel);
-						}
-						continue;
-
-					} else if (ly >= isosurface_upper_bound) {
-						// Above is only air
-						if (_channel == VoxelBuffer::CHANNEL_SDF) {
-							buffer.set_voxel_f(1, x, y, z, _channel);
-						} else if (_channel == VoxelBuffer::CHANNEL_TYPE) {
-							buffer.set_voxel(air_type, x, y, z, _channel);
-						}
-						continue;
-					}
-
-					// Bias is what makes noise become "matter" the lower we go, and "air" the higher we go
-					float t = (ly - _height_start) * height_range_inv;
-					float bias = 2.0 * t - 1.0;
-
-					// We are near the isosurface, need to calculate noise value
-					float n = get_shaped_noise(noise, lx, ly, lz, one_minus_persistence, bias);
-					float d = (n + bias) * iso_scale;
-
-					if (_channel == VoxelBuffer::CHANNEL_SDF) {
-						buffer.set_voxel_f(d, x, y, z, _channel);
-					} else if (_channel == VoxelBuffer::CHANNEL_TYPE && d < 0) {
-						buffer.set_voxel(matter_type, x, y, z, _channel);
-					}
+				if (_channel == VoxelBuffer::CHANNEL_SDF)
+				{
+					//print_line(String("at {0} sdf_value = {1}").format(varray(Vector3(lx, ly, lz), sdf_value)));
+					buffer.set_voxel_f(sdf_value, x, y, z, _channel);
+				}
+				else if (_channel == VoxelBuffer::CHANNEL_TYPE) {
+					buffer.set_voxel_f(1, x, y, z, _channel);
 				}
 			}
 		}

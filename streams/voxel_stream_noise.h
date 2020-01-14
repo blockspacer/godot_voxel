@@ -31,7 +31,7 @@ private:
 	Ref<OpenSimplexNoise> _noise;
 	FloatBuffer3D _noise_buffer;
 	float _height_start = 0;
-	float _height_range = 300;
+	float _height_range = 150;
 };
 
 #endif // VOXEL_STREAM_NOISE_H
