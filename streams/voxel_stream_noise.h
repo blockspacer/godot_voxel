@@ -27,7 +27,7 @@ protected:
 	static void _bind_methods();
 
 private:
-	VoxelBuffer::ChannelId _channel = VoxelBuffer::CHANNEL_TYPE;
+	VoxelBuffer::ChannelId _channel = VoxelBuffer::CHANNEL_SDF;
 	Ref<OpenSimplexNoise> _noise;
 	FloatBuffer3D _noise_buffer;
 	float _height_start = 0;
