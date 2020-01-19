@@ -166,6 +166,8 @@ void VoxelTool::do_sphere(Vector3 center, float radius) {
 	if (_channel == VoxelBuffer::CHANNEL_SDF) {
 
 		box.for_each_cell([this, center, radius](Vector3i pos) {
+			if(pos.to_vec3().distance_to(center) > radius)
+				return;
 			float d = pos.to_vec3().distance_to(center) - radius;
 			_set_voxel_f(pos, sdf_blend(d, get_voxel_f(pos), _mode));
 		});
@@ -186,7 +188,19 @@ void VoxelTool::do_sphere(Vector3 center, float radius) {
 }
 
 void VoxelTool::do_box(Vector3i begin, Vector3i end) {
-	ERR_PRINT("Not implemented");
+	Rect3i box(begin, end - begin);
+
+	ERR_FAIL_COND(end.distance_sq(begin) <= 0);
+
+	if (!is_area_editable(box)) {
+		print_line("Area not editable");
+		return;
+	}
+	box.for_each_cell([this](Vector3i pos) {
+		_set_voxel_f(pos, _mode == MODE_REMOVE ? 100.0 : -100.0);
+	});
+
+	_post_edit(box);
 }
 
 void VoxelTool::paste(Vector3i pos, Ref<VoxelBuffer> p_voxels, int mask_value) {
@@ -224,6 +238,7 @@ void VoxelTool::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_voxel", "pos", "v"), &VoxelTool::_b_set_voxel);
 	ClassDB::bind_method(D_METHOD("set_voxel_f", "pos", "v"), &VoxelTool::_b_set_voxel_f);
 	ClassDB::bind_method(D_METHOD("do_point", "pos"), &VoxelTool::_b_do_point);
+	ClassDB::bind_method(D_METHOD("do_box", "begin", "end"), &VoxelTool::_b_do_box);
 	ClassDB::bind_method(D_METHOD("do_sphere", "center", "radius"), &VoxelTool::_b_do_sphere);
 
 	ClassDB::bind_method(D_METHOD("raycast", "origin", "direction", "max_distance"), &VoxelTool::_b_raycast, DEFVAL(10.0));
